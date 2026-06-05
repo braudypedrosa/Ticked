@@ -4,7 +4,7 @@ import { providerSecret, requiredProviderSecret } from "../_shared/provider_conf
 // @ts-ignore JS module shared with Node tests.
 import { assertOAuthState, buildBasecampConnectionRows } from "../_shared/oauth.mjs";
 // @ts-ignore JS module shared with Node tests.
-import { htmlResponse, optionsResponse } from "../_shared/http.mjs";
+import { oauthCallbackFallbackResponse, optionsResponse, redirectResponse } from "../_shared/http.mjs";
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return optionsResponse();
@@ -17,7 +17,11 @@ Deno.serve(async (req) => {
 
   try {
     if (!provider || !code || !state) {
-      return htmlResponse("<h1>Missing OAuth callback data</h1>", 400);
+      return oauthCallbackFallbackResponse({
+        tone: "error",
+        title: "Connection incomplete",
+        message: "The authorization response was missing required data. Try connecting again from Ticked.",
+      }, req.url);
     }
 
     const { data: oauthState, error: stateError } = await service
@@ -41,14 +45,29 @@ Deno.serve(async (req) => {
     }
 
     await service.from("oauth_states").update({ status: "completed" }).eq("id", oauthState.id);
-    return htmlResponse("<h1>Connected</h1><p>You can close this window and return to Ticked.</p>");
+    return redirectResponse(oauthResultURL(provider, "connected"));
   } catch (error) {
     if (state) {
       await service.from("oauth_states").update({ status: "failed" }).eq("state", state);
     }
-    return htmlResponse(`<h1>Connection failed</h1><p>${escapeHTML(errorMessage(error))}</p>`, 500);
+    if (provider) {
+      return redirectResponse(oauthResultURL(provider, "failed"));
+    }
+    return oauthCallbackFallbackResponse({
+      tone: "error",
+      title: "Connection failed",
+      message: "Ticked could not finish linking this account.",
+      detail: errorMessage(error),
+    }, req.url);
   }
 });
+
+function oauthResultURL(provider: string, status: "connected" | "failed"): string {
+  const url = new URL("ticked://oauth-result");
+  url.searchParams.set("provider", provider);
+  url.searchParams.set("status", status);
+  return url.toString();
+}
 
 async function completeLinearOAuth(service: any, oauthState: any, code: string) {
   const body = new URLSearchParams({
@@ -171,12 +190,4 @@ async function storeToken(service: any, connectionID: string, token: Record<stri
     p_raw_token: token,
   });
   if (error) throw error;
-}
-
-function escapeHTML(value: unknown): string {
-  return String(value)
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;");
 }

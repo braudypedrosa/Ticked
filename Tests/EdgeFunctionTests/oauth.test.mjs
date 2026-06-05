@@ -8,6 +8,12 @@ import {
   buildTrelloAuthorizeUrl,
   tokenUpdateFromRefresh,
 } from "../../supabase/functions/_shared/oauth.mjs";
+import {
+  htmlResponse,
+  oauthCallbackFallbackResponse,
+  oauthCallbackPage,
+  redirectResponse,
+} from "../../supabase/functions/_shared/http.mjs";
 
 test("assertOAuthState rejects missing or mismatched callback state", () => {
   assert.throws(() => assertOAuthState("expected", ""), /Missing OAuth state/);
@@ -111,4 +117,54 @@ test("tokenUpdateFromRefresh rotates refresh tokens when provider returns one", 
   assert.equal(update.access_token, "new_access");
   assert.equal(update.refresh_token, "new_refresh");
   assert.equal(update.expires_at, "2026-06-06T00:00:00.000Z");
+});
+
+test("OAuth callback page renders a branded success state", () => {
+  const html = oauthCallbackPage({
+    title: "Linear connected",
+    message: "Your account is linked. You can close this window and return to Ticked.",
+  });
+
+  assert.match(html, /<!doctype html>/);
+  assert.match(html, /Linear connected/);
+  assert.match(html, /Close Window/);
+  assert.doesNotMatch(html, /<h1>Connected<\/h1><p>/);
+});
+
+test("HTML responses declare browser-renderable content type", () => {
+  const response = htmlResponse(oauthCallbackPage());
+
+  assert.equal(response.headers.get("content-type"), "text/html; charset=utf-8");
+  assert.match(response.headers.get("content-security-policy"), /style-src 'unsafe-inline'/);
+});
+
+test("OAuth fallback uses plain text on the default Supabase functions domain", async () => {
+  const response = oauthCallbackFallbackResponse({
+    title: "Connection incomplete",
+    message: "Try connecting again from Ticked.",
+  }, "https://project.supabase.co/functions/v1/oauth-callback");
+  const body = await response.text();
+
+  assert.equal(response.headers.get("content-type"), "text/plain; charset=utf-8");
+  assert.match(body, /Ticked\n\nConnection incomplete/);
+  assert.doesNotMatch(body, /<html/);
+});
+
+test("OAuth result redirects can open Ticked after the server callback finishes", () => {
+  const response = redirectResponse("ticked://oauth-result?provider=linear&status=connected");
+
+  assert.equal(response.status, 302);
+  assert.equal(response.headers.get("location"), "ticked://oauth-result?provider=linear&status=connected");
+});
+
+test("OAuth callback page escapes failure details", () => {
+  const html = oauthCallbackPage({
+    tone: "error",
+    title: "Connection failed",
+    message: "Could not connect.",
+    detail: "<script>alert('x')</script>",
+  });
+
+  assert.match(html, /&lt;script&gt;alert/);
+  assert.doesNotMatch(html, /<script>alert/);
 });

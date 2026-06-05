@@ -96,6 +96,11 @@ final class AppStore: ObservableObject {
     }
 
     func handleAuthCallback(_ url: URL) async {
+        if url.scheme == "ticked", url.host == "oauth-result" {
+            await handleOAuthResult(url)
+            return
+        }
+
         if url.scheme == "ticked", url.host == "oauth", url.path == "/trello" {
             await handleTrelloCallback(url)
             return
@@ -161,6 +166,21 @@ final class AppStore: ObservableObject {
         } catch {
             connectionMessage = "Could not disconnect \(connection.accountLabel): \(error.localizedDescription)"
         }
+    }
+
+    private func handleOAuthResult(_ url: URL) async {
+        let queryItems = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
+        let provider = queryItems.first(where: { $0.name == "provider" })?.value.flatMap(Provider.init(rawValue:))
+        let status = queryItems.first(where: { $0.name == "status" })?.value
+        let providerName = provider?.displayName ?? "Account"
+
+        if status == "connected" {
+            authMessage = "\(providerName) connected"
+        } else {
+            authMessage = "\(providerName) connection failed. Try again."
+        }
+
+        await loadConnections()
     }
 
     private func handleTrelloCallback(_ url: URL) async {
