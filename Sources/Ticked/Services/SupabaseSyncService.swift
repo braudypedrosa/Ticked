@@ -31,7 +31,7 @@ enum SyncError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .missingSupabaseConfiguration:
-            "Supabase URL or publishable key is missing"
+            "Cloud sync is not configured"
         }
     }
 }

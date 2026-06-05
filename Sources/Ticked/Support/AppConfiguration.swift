@@ -11,4 +11,8 @@ struct AppConfiguration {
         supabaseURL = environment["TICKED_SUPABASE_URL"].flatMap(URL.init(string:))
         supabasePublishableKey = environment["TICKED_SUPABASE_PUBLISHABLE_KEY"]?.nilIfBlank
     }
+
+    var isCloudSyncConfigured: Bool {
+        supabaseURL != nil && supabasePublishableKey != nil
+    }
 }

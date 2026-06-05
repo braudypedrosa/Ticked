@@ -6,10 +6,10 @@ struct SettingsView: View {
 
     var body: some View {
         Form {
-            Section("Sign In") {
+            Section("Ticked Account") {
                 TextField("Email", text: $appStore.authEmail)
                     .textContentType(.emailAddress)
-                Button("Send Magic Link") {
+                Button("Send Sign-In Link") {
                     Task { await appStore.sendMagicLink() }
                 }
                 Text(appStore.authMessage)
@@ -17,9 +17,8 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
-            Section("Supabase") {
-                LabeledContent("Project URL", value: AppConfiguration.current.supabaseURL?.absoluteString ?? "Set TICKED_SUPABASE_URL")
-                LabeledContent("Publishable Key", value: AppConfiguration.current.supabasePublishableKey == nil ? "Set TICKED_SUPABASE_PUBLISHABLE_KEY" : "Configured")
+            Section("Cloud Sync") {
+                LabeledContent("Status", value: AppConfiguration.current.isCloudSyncConfigured ? "Ready" : "Not configured")
             }
 
             Section("Connections") {

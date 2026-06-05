@@ -9,7 +9,7 @@ final class AppStore: ObservableObject {
     @Published var isLoadingConnections = false
     @Published var lastRefreshMessage = "Not synced yet"
     @Published var authEmail = ""
-    @Published var authMessage = "Sign in with your Supabase email to connect accounts."
+    @Published var authMessage = "Sign in to connect accounts."
     @Published var connections: [IntegrationConnection] = []
     @Published var connectionMessage = "No accounts loaded yet"
 
@@ -89,9 +89,9 @@ final class AppStore: ObservableObject {
     func sendMagicLink() async {
         do {
             try await appService.sendMagicLink(to: authEmail)
-            authMessage = "Magic link sent to \(authEmail)"
+            authMessage = "Sign-in link sent to \(authEmail)"
         } catch {
-            authMessage = "Could not send magic link: \(error.localizedDescription)"
+            authMessage = "Could not send sign-in link: \(error.localizedDescription)"
         }
     }
 
