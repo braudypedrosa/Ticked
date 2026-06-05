@@ -1,0 +1,9 @@
+.build/
+.swiftpm/
+dist/
+node_modules/
+supabase/.temp/
+.DS_Store
+.env
+.env.*
+!.env.example
