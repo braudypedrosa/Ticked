@@ -2,6 +2,10 @@
 
 SwiftUI macOS todo app backed by Supabase. It imports assigned tasks from Linear, Basecamp, and Trello into a local-completion todo inbox with List/Card views.
 
+Ticked supports multiple connections per provider. Linear uses OAuth consent on
+each connect attempt so another workspace can be selected, and Basecamp stores
+one connection per Basecamp account returned by Launchpad authorization.
+
 ## Local App
 
 Set runtime values before launching:

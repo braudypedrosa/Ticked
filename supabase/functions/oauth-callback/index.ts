@@ -2,7 +2,7 @@ import { serviceClient } from "../_shared/supabase_client.ts";
 import { errorMessage } from "../_shared/errors.ts";
 import { providerSecret, requiredProviderSecret } from "../_shared/provider_config.ts";
 // @ts-ignore JS module shared with Node tests.
-import { assertOAuthState } from "../_shared/oauth.mjs";
+import { assertOAuthState, buildBasecampConnectionRows } from "../_shared/oauth.mjs";
 // @ts-ignore JS module shared with Node tests.
 import { htmlResponse, optionsResponse } from "../_shared/http.mjs";
 
@@ -62,15 +62,18 @@ async function completeLinearOAuth(service: any, oauthState: any, code: string) 
   if (clientSecret) body.set("client_secret", clientSecret);
 
   const token = await exchangeToken("https://api.linear.app/oauth/token", body);
+  const account = await fetchLinearAccount(token.access_token);
   const { data: connection, error } = await service
     .from("integration_connections")
-    .insert({
+    .upsert({
       user_id: oauthState.user_id,
       provider: "linear",
-      account_label: "Linear",
-      external_account_id: "me",
+      account_label: account.name,
+      external_account_id: account.id,
+      external_account_url: account.url,
+      status: "active",
       scopes: ["read"],
-    })
+    }, { onConflict: "user_id,provider,external_account_id" })
     .select()
     .single();
   if (error) throw error;
@@ -89,24 +92,18 @@ async function completeBasecampOAuth(service: any, oauthState: any, code: string
 
   const token = await exchangeToken("https://launchpad.37signals.com/authorization/token", body);
   const accounts = await fetchBasecampAccounts(token.access_token);
-  const account = accounts.find((item: any) => item.product === "bc3") ?? accounts[0];
-  if (!account) throw new Error("Basecamp did not return an account");
+  const rows = buildBasecampConnectionRows(oauthState.user_id, accounts);
+  if (!rows.length) throw new Error("Basecamp did not return a Basecamp account");
 
-  const { data: connection, error } = await service
+  const { data: connections, error } = await service
     .from("integration_connections")
-    .insert({
-      user_id: oauthState.user_id,
-      provider: "basecamp",
-      account_label: account.name ?? "Basecamp",
-      external_account_id: String(account.id),
-      external_account_url: account.href,
-      scopes: ["read"],
-    })
-    .select()
-    .single();
+    .upsert(rows, { onConflict: "user_id,provider,external_account_id" })
+    .select();
   if (error) throw error;
 
-  await storeToken(service, connection.id, token);
+  for (const connection of connections ?? []) {
+    await storeToken(service, connection.id, token);
+  }
 }
 
 async function exchangeToken(endpoint: string, body: URLSearchParams): Promise<Record<string, any>> {
@@ -132,6 +129,34 @@ async function fetchBasecampAccounts(accessToken: string): Promise<any[]> {
   if (!response.ok) throw new Error(`Basecamp account lookup failed: ${response.status}`);
   const body = await response.json();
   return body.accounts ?? [];
+}
+
+async function fetchLinearAccount(accessToken: string): Promise<{ id: string; name: string; url: string | null }> {
+  const response = await fetch("https://api.linear.app/graphql", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      query: `query TickedLinearAccount {
+        organization { id name urlKey }
+      }`,
+    }),
+  });
+  if (!response.ok) throw new Error(`Linear account lookup failed: ${response.status}`);
+
+  const body = await response.json();
+  const organization = body?.data?.organization;
+  if (!organization?.id) {
+    throw new Error("Linear did not return an organization");
+  }
+
+  return {
+    id: organization.id,
+    name: organization.name ?? "Linear",
+    url: organization.urlKey ? `https://linear.app/${organization.urlKey}` : null,
+  };
 }
 
 async function storeToken(service: any, connectionID: string, token: Record<string, any>) {

@@ -1,0 +1,2 @@
+create unique index integration_connections_user_provider_external_account_unique
+on public.integration_connections(user_id, provider, external_account_id);

@@ -40,6 +40,26 @@ struct SupabaseAppService {
         try client().auth.currentUser?.email
     }
 
+    func listConnections() async throws -> [IntegrationConnection] {
+        let client = try client()
+        return try await client
+            .from("integration_connections")
+            .select()
+            .order("provider")
+            .order("account_label")
+            .execute()
+            .value
+    }
+
+    func disableConnection(_ connection: IntegrationConnection) async throws {
+        let client = try client()
+        try await client
+            .from("integration_connections")
+            .update(ConnectionStatusUpdate(status: .disabled), returning: .minimal)
+            .eq("id", value: connection.id.uuidString)
+            .execute()
+    }
+
     func startOAuth(for provider: EfficiencyCore.Provider) async throws -> URL {
         let client = try client()
         let response: OAuthStartResponse = try await client.functions.invoke(
@@ -72,4 +92,8 @@ struct OAuthStartResponse: Decodable {
 struct TrelloStoreTokenRequest: Encodable {
     let token: String
     let state: String?
+}
+
+private struct ConnectionStatusUpdate: Encodable {
+    let status: ConnectionStatus
 }

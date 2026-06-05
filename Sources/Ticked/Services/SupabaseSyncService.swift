@@ -1,4 +1,5 @@
 import Foundation
+import EfficiencyCore
 import Supabase
 
 struct SupabaseSyncService {
@@ -18,6 +19,10 @@ struct SupabaseSyncService {
         let client = SupabaseClient(supabaseURL: url, supabaseKey: key)
         _ = try await client.functions.invoke("sync-now")
     }
+
+    func syncNow(connection: IntegrationConnection) async throws {
+        try await syncNow()
+    }
 }
 
 enum SyncError: LocalizedError {
@@ -30,4 +35,3 @@ enum SyncError: LocalizedError {
         }
     }
 }
-

@@ -39,6 +39,7 @@ Deno.serve(async (req) => {
         state,
         codeChallenge: await pkceChallenge(codeVerifier),
         scopes: ["read"],
+        prompt: "consent",
       });
     } else if (provider === "basecamp") {
       authorizeURL = buildBasecampAuthorizeUrl({

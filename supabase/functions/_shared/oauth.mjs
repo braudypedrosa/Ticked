@@ -7,7 +7,7 @@ export function assertOAuthState(expectedState, callbackState) {
   }
 }
 
-export function buildLinearAuthorizeUrl({ clientId, redirectUri, state, codeChallenge, scopes = ["read"] }) {
+export function buildLinearAuthorizeUrl({ clientId, redirectUri, state, codeChallenge, scopes = ["read"], prompt = "" }) {
   const url = new URL("https://linear.app/oauth/authorize");
   url.searchParams.set("client_id", clientId);
   url.searchParams.set("redirect_uri", redirectUri);
@@ -16,7 +16,22 @@ export function buildLinearAuthorizeUrl({ clientId, redirectUri, state, codeChal
   url.searchParams.set("state", state);
   url.searchParams.set("code_challenge", codeChallenge);
   url.searchParams.set("code_challenge_method", "S256");
+  if (prompt) url.searchParams.set("prompt", prompt);
   return url;
+}
+
+export function buildBasecampConnectionRows(userId, accounts) {
+  return accounts
+    .filter((account) => account.product === "bc3")
+    .map((account) => ({
+      user_id: userId,
+      provider: "basecamp",
+      account_label: account.name ?? "Basecamp",
+      external_account_id: String(account.id),
+      external_account_url: account.href,
+      status: "active",
+      scopes: ["read"],
+    }));
 }
 
 export function buildBasecampAuthorizeUrl({ clientId, redirectUri, state }) {
@@ -73,4 +88,3 @@ export function base64UrlEncode(bytes) {
   const binary = Array.from(bytes, (byte) => String.fromCharCode(byte)).join("");
   return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
 }
-

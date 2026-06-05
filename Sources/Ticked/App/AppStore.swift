@@ -6,9 +6,12 @@ import Foundation
 final class AppStore: ObservableObject {
     @Published var state = TodoListState(todos: DemoData.todos)
     @Published var isRefreshing = false
+    @Published var isLoadingConnections = false
     @Published var lastRefreshMessage = "Not synced yet"
     @Published var authEmail = ""
     @Published var authMessage = "Sign in with your Supabase email to connect accounts."
+    @Published var connections: [IntegrationConnection] = []
+    @Published var connectionMessage = "No accounts loaded yet"
 
     private let appService: SupabaseAppService
     private let syncService: SupabaseSyncService
@@ -53,6 +56,14 @@ final class AppStore: ObservableObject {
         state.count(for: filter)
     }
 
+    var groupedConnections: [Provider: [IntegrationConnection]] {
+        IntegrationConnection.groupedByProvider(connections)
+    }
+
+    var activeConnectionCount: Int {
+        IntegrationConnection.activeCount(in: connections)
+    }
+
     func toggleCompletion(for todo: TodoItem) {
         guard let index = todos.firstIndex(where: { $0.id == todo.id }) else { return }
         if todos[index].isLocallyCompleted {
@@ -69,6 +80,7 @@ final class AppStore: ObservableObject {
         do {
             try await syncService.syncNow()
             lastRefreshMessage = "Manual sync requested"
+            await loadConnections()
         } catch {
             lastRefreshMessage = "Manual sync unavailable: \(error.localizedDescription)"
         }
@@ -97,6 +109,7 @@ final class AppStore: ObservableObject {
             } else {
                 authMessage = "Signed in"
             }
+            await loadConnections()
         } catch {
             authMessage = "Could not complete sign in: \(error.localizedDescription)"
         }
@@ -109,6 +122,44 @@ final class AppStore: ObservableObject {
             authMessage = "Opening \(provider.displayName) authorization"
         } catch {
             authMessage = "Could not start \(provider.displayName): \(error.localizedDescription)"
+        }
+    }
+
+    func loadConnections() async {
+        isLoadingConnections = true
+        defer { isLoadingConnections = false }
+
+        do {
+            connections = try await appService.listConnections()
+            connectionMessage = connections.isEmpty
+                ? "No connected accounts"
+                : "\(activeConnectionCount) active account\(activeConnectionCount == 1 ? "" : "s")"
+        } catch {
+            connectionMessage = "Could not load accounts: \(error.localizedDescription)"
+        }
+    }
+
+    func sync(_ connection: IntegrationConnection) async {
+        do {
+            try await syncService.syncNow(connection: connection)
+            lastRefreshMessage = "Sync requested for \(connection.accountLabel)"
+            await loadConnections()
+        } catch {
+            lastRefreshMessage = "Could not sync \(connection.accountLabel): \(error.localizedDescription)"
+        }
+    }
+
+    func reconnect(_ connection: IntegrationConnection) async {
+        await connect(connection.provider)
+    }
+
+    func disconnect(_ connection: IntegrationConnection) async {
+        do {
+            try await appService.disableConnection(connection)
+            connectionMessage = "\(connection.accountLabel) disconnected"
+            await loadConnections()
+        } catch {
+            connectionMessage = "Could not disconnect \(connection.accountLabel): \(error.localizedDescription)"
         }
     }
 
@@ -130,6 +181,7 @@ final class AppStore: ObservableObject {
         do {
             try await appService.storeTrelloToken(token, state: state)
             authMessage = "Trello connected"
+            await loadConnections()
         } catch {
             authMessage = "Could not store Trello token: \(error.localizedDescription)"
         }
