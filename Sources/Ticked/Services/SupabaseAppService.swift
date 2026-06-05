@@ -51,12 +51,33 @@ struct SupabaseAppService {
             .value
     }
 
+    func listTodos() async throws -> [TodoItem] {
+        let client = try client()
+        let rows: [TodoRecord] = try await client
+            .from("todos")
+            .select("id,connection_id,provider,external_id,source_key,title,external_url,source_name,due_at,first_seen_at,last_synced_at,local_completed_at")
+            .order("last_synced_at", ascending: false)
+            .execute()
+            .value
+
+        return rows.map(\.todoItem)
+    }
+
     func disableConnection(_ connection: IntegrationConnection) async throws {
         let client = try client()
         try await client
             .from("integration_connections")
             .update(ConnectionStatusUpdate(status: .disabled), returning: .minimal)
             .eq("id", value: connection.id.uuidString)
+            .execute()
+    }
+
+    func setTodoCompletion(_ todo: TodoItem, completedAt: Date?) async throws {
+        let client = try client()
+        try await client
+            .from("todos")
+            .update(TodoCompletionUpdate(localCompletedAt: completedAt), returning: .minimal)
+            .eq("id", value: todo.id.uuidString)
             .execute()
     }
 
@@ -96,4 +117,12 @@ struct TrelloStoreTokenRequest: Encodable {
 
 private struct ConnectionStatusUpdate: Encodable {
     let status: ConnectionStatus
+}
+
+private struct TodoCompletionUpdate: Encodable {
+    let localCompletedAt: Date?
+
+    enum CodingKeys: String, CodingKey {
+        case localCompletedAt = "local_completed_at"
+    }
 }

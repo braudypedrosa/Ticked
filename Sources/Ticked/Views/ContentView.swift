@@ -48,7 +48,7 @@ struct ContentView: View {
         }
         .onAppear {
             appStore.selectedFilter = TodoFilter(rawValue: selectedFilterRawValue) ?? .inbox
+            Task { await appStore.loadInitialDataIfNeeded() }
         }
     }
 }
-

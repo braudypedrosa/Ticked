@@ -94,5 +94,41 @@ final class TodoDomainTests: XCTestCase {
         XCTAssertEqual(TodoFilter.overdue.apply(to: todos, now: now).map(\.title), ["Overdue"])
         XCTAssertEqual(TodoFilter.completed.apply(to: todos, now: now).map(\.title), ["Completed"])
     }
-}
 
+    func testTodoRecordMapsDatabaseColumnsToTodoItem() {
+        let id = UUID(uuidString: "20000000-0000-0000-0000-000000000001")!
+        let connectionID = UUID(uuidString: "20000000-0000-0000-0000-000000000002")!
+        let dueAt = Date.iso8601("2026-06-05T00:00:00Z")
+        let firstSeenAt = Date.iso8601("2026-06-05T08:00:00Z")
+        let lastSyncedAt = Date.iso8601("2026-06-05T09:00:00Z")
+        let completedAt = Date.iso8601("2026-06-05T10:00:00Z")
+        let record = TodoRecord(
+            id: id,
+            connectionID: connectionID,
+            provider: .basecamp,
+            externalID: "task-1",
+            sourceKey: nil,
+            title: "Imported task",
+            externalURL: URL(string: "https://example.com/task-1"),
+            sourceName: "Client / List",
+            dueAt: dueAt,
+            firstSeenAt: firstSeenAt,
+            lastSyncedAt: lastSyncedAt,
+            localCompletedAt: completedAt
+        )
+
+        let todo = record.todoItem
+
+        XCTAssertEqual(todo.id, id)
+        XCTAssertEqual(todo.connectionID, connectionID)
+        XCTAssertEqual(todo.provider, .basecamp)
+        XCTAssertEqual(todo.externalID, "task-1")
+        XCTAssertEqual(todo.title, "Imported task")
+        XCTAssertEqual(todo.externalURL, URL(string: "https://example.com/task-1"))
+        XCTAssertEqual(todo.sourceName, "Client / List")
+        XCTAssertEqual(todo.dueDate, dueAt)
+        XCTAssertEqual(todo.firstSeenAt, firstSeenAt)
+        XCTAssertEqual(todo.lastSyncedAt, lastSyncedAt)
+        XCTAssertEqual(todo.localCompletedAt, completedAt)
+    }
+}

@@ -4,9 +4,10 @@ import Foundation
 
 @MainActor
 final class AppStore: ObservableObject {
-    @Published var state = TodoListState(todos: DemoData.todos)
+    @Published var state = TodoListState()
     @Published var isRefreshing = false
     @Published var isLoadingConnections = false
+    @Published var isLoadingTodos = false
     @Published var lastRefreshMessage = "Not synced yet"
     @Published var authEmail = ""
     @Published var authMessage = "Sign in to connect accounts."
@@ -15,6 +16,7 @@ final class AppStore: ObservableObject {
 
     private let appService: SupabaseAppService
     private let syncService: SupabaseSyncService
+    private var hasLoadedInitialData = false
 
     init(
         appService: SupabaseAppService = SupabaseAppService(),
@@ -66,11 +68,36 @@ final class AppStore: ObservableObject {
 
     func toggleCompletion(for todo: TodoItem) {
         guard let index = todos.firstIndex(where: { $0.id == todo.id }) else { return }
+        let previousTodo = todos[index]
+        let completedAt: Date?
+
         if todos[index].isLocallyCompleted {
             todos[index].reopenLocally()
+            completedAt = nil
         } else {
-            todos[index].markLocallyCompleted()
+            let now = Date()
+            todos[index].markLocallyCompleted(at: now)
+            completedAt = now
         }
+
+        let updatedTodo = todos[index]
+        Task {
+            do {
+                try await appService.setTodoCompletion(updatedTodo, completedAt: completedAt)
+            } catch {
+                if let currentIndex = todos.firstIndex(where: { $0.id == previousTodo.id }) {
+                    todos[currentIndex] = previousTodo
+                }
+                lastRefreshMessage = "Could not update todo: \(error.localizedDescription)"
+            }
+        }
+    }
+
+    func loadInitialDataIfNeeded() async {
+        guard !hasLoadedInitialData else { return }
+        hasLoadedInitialData = true
+        await loadTodos()
+        await loadConnections()
     }
 
     func refresh() async {
@@ -79,8 +106,11 @@ final class AppStore: ObservableObject {
 
         do {
             try await syncService.syncNow()
-            lastRefreshMessage = "Manual sync requested"
+            let loadedTodos = await loadTodos()
             await loadConnections()
+            if loadedTodos {
+                lastRefreshMessage = "Synced \(todos.count) todo\(todos.count == 1 ? "" : "s")"
+            }
         } catch {
             lastRefreshMessage = "Manual sync unavailable: \(error.localizedDescription)"
         }
@@ -114,6 +144,7 @@ final class AppStore: ObservableObject {
             } else {
                 authMessage = "Signed in"
             }
+            await loadTodos()
             await loadConnections()
         } catch {
             authMessage = "Could not complete sign in: \(error.localizedDescription)"
@@ -144,11 +175,31 @@ final class AppStore: ObservableObject {
         }
     }
 
+    @discardableResult
+    func loadTodos() async -> Bool {
+        isLoadingTodos = true
+        defer { isLoadingTodos = false }
+
+        do {
+            todos = try await appService.listTodos()
+            lastRefreshMessage = todos.isEmpty
+                ? "No synced todos yet"
+                : "Loaded \(todos.count) todo\(todos.count == 1 ? "" : "s")"
+            return true
+        } catch {
+            lastRefreshMessage = "Could not load todos: \(error.localizedDescription)"
+            return false
+        }
+    }
+
     func sync(_ connection: IntegrationConnection) async {
         do {
             try await syncService.syncNow(connection: connection)
-            lastRefreshMessage = "Sync requested for \(connection.accountLabel)"
+            let loadedTodos = await loadTodos()
             await loadConnections()
+            if loadedTodos {
+                lastRefreshMessage = "Synced \(connection.accountLabel)"
+            }
         } catch {
             lastRefreshMessage = "Could not sync \(connection.accountLabel): \(error.localizedDescription)"
         }
@@ -176,11 +227,11 @@ final class AppStore: ObservableObject {
 
         if status == "connected" {
             authMessage = "\(providerName) connected"
+            await refresh()
         } else {
             authMessage = "\(providerName) connection failed. Try again."
+            await loadConnections()
         }
-
-        await loadConnections()
     }
 
     private func handleTrelloCallback(_ url: URL) async {
