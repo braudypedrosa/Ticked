@@ -10,12 +10,14 @@ struct TodoListView: View {
             Divider()
             content
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 
     @ViewBuilder
     private var content: some View {
         if appStore.visibleTodos.isEmpty {
             ContentUnavailableView("No todos", systemImage: "checklist", description: Text("Try another filter or run a refresh."))
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
             switch appStore.viewMode {
             case .list:
@@ -35,6 +37,7 @@ struct TodoListView: View {
                     }
                     .padding()
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
     }
@@ -57,4 +60,3 @@ struct TodoListView: View {
         .padding(.vertical, 14)
     }
 }
-
